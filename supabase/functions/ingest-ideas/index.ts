@@ -54,20 +54,22 @@ type Card = {
   knowledge: any;
 };
 
-function topic(card: Card) {
+function topic(card: Card, byTheme = false) {
   const k = card.knowledge ?? {};
   const angles = (k.talking_points ?? []).map((p: { title: string }) => p.title).slice(0, 4).join(", ");
   if (card.kind === "action") return `${card.quote} ${k.context_short ?? ""}`.trim();
+  // запасной вариант: только темы, без текста цитаты (цитата тянет сайты-цитатники)
+  if (byTheme && angles) return `personal growth themes: ${angles}`;
   return `the idea behind "${card.quote}"${angles ? ` (angles: ${angles})` : ""}`;
 }
 
-function buildQuery(card: Card) {
-  return `Recent podcast episodes, scientific studies and expert articles with practical, evidence-based ideas about ${topic(card)}`;
+function buildQuery(card: Card, byTheme = false) {
+  return `Recent podcast episodes, scientific studies and expert articles with practical, evidence-based ideas about ${topic(card, byTheme)}`;
 }
 
-function systemPrompt(card: Card) {
+function systemPrompt(card: Card, byTheme = false) {
   return `You pick fresh, practical ideas for young people (16–25) to grow themselves, their work, relationships and family.
-Topic: ${topic(card)}.
+Topic: ${topic(card, byTheme)}.
 Find 3–5 DIFFERENT ideas from the search results. Prefer: a podcast episode page or its transcript/show notes, a peer-reviewed study or university/research news, an article by a recognised expert. Published in the last 2 years.
 Each idea must come from ONE result in the search results and use that result's exact URL. Never invent a URL, study, number or quote. Paraphrase; never copy more than 10 words.
 Fields: title (max 8 words), idea (2 short sentences), why (why it works, 1 sentence), try_today (one small thing to try today, max 15 words), source_name (show, journal or publication), url (the exact URL of that search result), type (podcast, research, article or video). Write in English.`;
@@ -131,61 +133,70 @@ Deno.serve(async (req) => {
   await sb.from("cards").update({ ideas_requested_at: new Date().toISOString() }).eq("id", cardId);
 
   try {
-    const start = new Date(Date.now() - 730 * 864e5).toISOString().slice(0, 10);
-    const res = await fetch("https://api.exa.ai/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": EXA_API_KEY },
-      body: JSON.stringify({
-        query: buildQuery(card as Card),
-        type: SEARCH_TYPE,
-        numResults: 12,
-        startPublishedDate: start,
-        excludeDomains: EXCLUDE,
-        systemPrompt: systemPrompt(card as Card),
-        outputSchema: OUTPUT_SCHEMA,
-        contents: { highlights: true },
-      }),
-    });
-    if (!res.ok) throw new Error(`Exa ${res.status}: ${(await res.text()).slice(0, 300)}`);
-    const data = await res.json();
+    let parsed: Record<string, unknown>[] = [];
+    let raw: unknown[] = [];
+    // deno-lint-ignore no-explicit-any
+    let results = new Map<string, any>();
+    let totalCost = 0;
+    for (const byTheme of [false, true]) {
+      const start = new Date(Date.now() - 730 * 864e5).toISOString().slice(0, 10);
+      const res = await fetch("https://api.exa.ai/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": EXA_API_KEY },
+        body: JSON.stringify({
+          query: buildQuery(card as Card, byTheme),
+          type: SEARCH_TYPE,
+          numResults: 12,
+          startPublishedDate: start,
+          excludeDomains: EXCLUDE,
+          systemPrompt: systemPrompt(card as Card, byTheme),
+          outputSchema: OUTPUT_SCHEMA,
+          contents: { highlights: true },
+        }),
+      });
+      if (!res.ok) throw new Error(`Exa ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      const data = await res.json();
 
-    let content = data?.output?.content;
-    if (typeof content === "string") {
-      const s = content.indexOf("{"), e = content.lastIndexOf("}");
-      content = s >= 0 && e > s ? JSON.parse(content.slice(s, e + 1)) : {};
-    }
-    // deno-lint-ignore no-explicit-any
-    const raw: any[] = Array.isArray(content?.ideas) ? content.ideas : [];
-    // Ссылка должна быть среди реальных результатов поиска — иначе идею выбрасываем.
-    // deno-lint-ignore no-explicit-any
-    const results = new Map<string, any>(((data?.results ?? []) as any[]).filter((r) => r?.url).map((r) => [norm(r.url), r]));
-    // Источники, которые Exa реально прочитал для ответа (grounding), тоже считаются проверенными.
-    // deno-lint-ignore no-explicit-any
-    const grounding = (data?.output?.grounding ?? []) as any[];
-    for (const g of grounding) {
-      for (const c of (g?.citations ?? [])) {
-        if (c?.url && !results.has(norm(c.url))) results.set(norm(c.url), { url: c.url, title: c.title ?? null, publishedDate: null });
+      let content = data?.output?.content;
+      if (typeof content === "string") {
+        const s = content.indexOf("{"), e = content.lastIndexOf("}");
+        content = s >= 0 && e > s ? JSON.parse(content.slice(s, e + 1)) : {};
       }
+      // deno-lint-ignore no-explicit-any
+      raw = Array.isArray(content?.ideas) ? content.ideas : [];
+      // Ссылка должна быть среди реальных результатов поиска — иначе идею выбрасываем.
+      // deno-lint-ignore no-explicit-any
+      results = new Map<string, any>(((data?.results ?? []) as any[]).filter((r) => r?.url).map((r) => [norm(r.url), r]));
+      // Источники, которые Exa реально прочитал для ответа (grounding), тоже считаются проверенными.
+      // deno-lint-ignore no-explicit-any
+      const grounding = (data?.output?.grounding ?? []) as any[];
+      for (const g of grounding) {
+        for (const c of (g?.citations ?? [])) {
+          if (c?.url && !results.has(norm(c.url))) results.set(norm(c.url), { url: c.url, title: c.title ?? null, publishedDate: null });
+        }
+      }
+      const clip = (v: unknown, n: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : null);
+      parsed = (raw as any[]).map((it) => {
+        const url = String(it?.url ?? "").match(/https?:\/\/[^\s)\]]+/)?.[0] ?? "";
+        const hit = results.get(norm(url));
+        const type = String(it?.type ?? "").toLowerCase();
+        if (!hit || !clip(it?.title, 120) || !clip(it?.idea, 500)) return null;
+        return {
+          card_id: cardId,
+          source_type: (TYPES as readonly string[]).includes(type) ? type : "article",
+          title: clip(it.title, 120),
+          idea: clip(it.idea, 500),
+          why: clip(it.why, 300),
+          try_today: clip(String(it.try_today ?? "").replace(/^try today:\s*/i, ""), 200),
+          source_name: clip(it.source_name, 120),
+          source_title: hit.title ?? null,
+          source_url: String(hit.url),
+          published_date: hit.publishedDate ? String(hit.publishedDate).slice(0, 10) : null,
+        };
+      }).filter(Boolean) as Record<string, unknown>[];
+      totalCost += Number(data?.costDollars?.total ?? 0);
+      if (parsed.length) break;
     }
-    const clip = (v: unknown, n: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : null);
-    const parsed = raw.map((it) => {
-      const url = String(it?.url ?? "").match(/https?:\/\/[^\s)\]]+/)?.[0] ?? "";
-      const hit = results.get(norm(url));
-      const type = String(it?.type ?? "").toLowerCase();
-      if (!hit || !clip(it?.title, 120) || !clip(it?.idea, 500)) return null;
-      return {
-        card_id: cardId,
-        source_type: (TYPES as readonly string[]).includes(type) ? type : "article",
-        title: clip(it.title, 120),
-        idea: clip(it.idea, 500),
-        why: clip(it.why, 300),
-        try_today: clip(String(it.try_today ?? "").replace(/^try today:\s*/i, ""), 200),
-        source_name: clip(it.source_name, 120),
-        source_title: hit.title ?? null,
-        source_url: String(hit.url),
-        published_date: hit.publishedDate ? String(hit.publishedDate).slice(0, 10) : null,
-      };
-    }).filter(Boolean) as Record<string, unknown>[];
 
     // До 3 идей, по возможности разных типов, без повторов источника.
     const picked: Record<string, unknown>[] = [];
@@ -200,13 +211,13 @@ Deno.serve(async (req) => {
       }
     }
     if (!picked.length) {
-      throw new Error(`no ideas with a verifiable source | lines=${raw.length} | sample=${JSON.stringify(raw[0] ?? null).slice(0, 300)} | urls=${[...results.keys()].slice(0, 6).join(" , ")} | outType=${typeof data?.output?.content}`);
+      throw new Error(`no ideas with a verifiable source | lines=${raw.length} | sample=${JSON.stringify(raw[0] ?? null).slice(0, 300)} | urls=${[...results.keys()].slice(0, 6).join(" , ")}`);
     }
 
     const batch_at = new Date().toISOString();
     const { error } = await sb.from("card_ideas").insert(picked.map((x) => ({ ...x, batch_at })));
     if (error) throw new Error(`save ideas: ${error.message}`);
-    return json({ ok: true, card_id: cardId, ideas: picked.map((x) => `${x.source_type}: ${x.title}`), cost: data?.costDollars ?? null });
+    return json({ ok: true, card_id: cardId, ideas: picked.map((x) => `${x.source_type}: ${x.title}`), cost: { total: Number(totalCost.toFixed(4)) } });
   } catch (e) {
     return json({ ok: false, card_id: cardId, error: e instanceof Error ? e.message : String(e) }, 500);
   }
