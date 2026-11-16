@@ -143,6 +143,14 @@ Deno.serve(async (req) => {
     // Ссылка должна быть среди реальных результатов поиска — иначе идею выбрасываем.
     // deno-lint-ignore no-explicit-any
     const results = new Map<string, any>(((data?.results ?? []) as any[]).filter((r) => r?.url).map((r) => [norm(r.url), r]));
+    // Источники, которые Exa реально прочитал для ответа (grounding), тоже считаются проверенными.
+    // deno-lint-ignore no-explicit-any
+    const grounding = (data?.output?.grounding ?? []) as any[];
+    for (const g of grounding) {
+      for (const c of (g?.citations ?? [])) {
+        if (c?.url && !results.has(norm(c.url))) results.set(norm(c.url), { url: c.url, title: c.title ?? null, publishedDate: null });
+      }
+    }
     const parsed = raw.map((line) => {
       const p = line.split("::").map((x) => x.trim());
       const url = (line.match(/https?:\/\/[^\s)\]]+/) ?? [""])[0];
@@ -174,7 +182,9 @@ Deno.serve(async (req) => {
         seenUrl.add(norm(String(it.source_url)));
       }
     }
-    if (!picked.length) throw new Error("no ideas with a verifiable source");
+    if (!picked.length) {
+      throw new Error(`no ideas with a verifiable source | lines=${raw.length} | sample=${(raw[0] ?? "").slice(0, 300)} | urls=${[...results.keys()].slice(0, 6).join(" , ")} | outType=${typeof data?.output?.content}`);
+    }
 
     const batch_at = new Date().toISOString();
     const { error } = await sb.from("card_ideas").insert(picked.map((x) => ({ ...x, batch_at })));
