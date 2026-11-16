@@ -70,14 +70,30 @@ function systemPrompt(card: Card) {
 Topic: ${topic(card)}.
 Find 3–5 DIFFERENT ideas from the search results. Prefer: a podcast episode page or its transcript/show notes, a peer-reviewed study or university/research news, an article by a recognised expert. Published in the last 2 years.
 Each idea must come from ONE result in the search results and use that result's exact URL. Never invent a URL, study, number or quote. Paraphrase; never copy more than 10 words.
-Write each item exactly as:
-"type :: title (max 8 words) :: the idea in 2 short sentences :: why it works, 1 sentence :: one small thing to try today (max 15 words) :: source name (show, journal or publication) :: https://exact-url"
-type is one of: podcast, research, article, video. Write in English.`;
+Fields: title (max 8 words), idea (2 short sentences), why (why it works, 1 sentence), try_today (one small thing to try today, max 15 words), source_name (show, journal or publication), url (the exact URL of that search result), type (podcast, research, article or video). Write in English.`;
 }
 
+// Всего 8 полей (лимит Exa — 10 на всю схему).
 const OUTPUT_SCHEMA = {
   type: "object",
-  properties: { ideas: { type: "array", items: { type: "string" } } },
+  properties: {
+    ideas: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          type: { type: "string", enum: ["podcast", "research", "article", "video"] },
+          title: { type: "string" },
+          idea: { type: "string" },
+          why: { type: "string" },
+          try_today: { type: "string" },
+          source_name: { type: "string" },
+          url: { type: "string" },
+        },
+        required: ["type", "title", "idea", "try_today", "url"],
+      },
+    },
+  },
   required: ["ideas"],
 };
 
@@ -138,8 +154,8 @@ Deno.serve(async (req) => {
       const s = content.indexOf("{"), e = content.lastIndexOf("}");
       content = s >= 0 && e > s ? JSON.parse(content.slice(s, e + 1)) : {};
     }
-    const raw: string[] = Array.isArray(content?.ideas) ? content.ideas.map(String) : [];
-
+    // deno-lint-ignore no-explicit-any
+    const raw: any[] = Array.isArray(content?.ideas) ? content.ideas : [];
     // Ссылка должна быть среди реальных результатов поиска — иначе идею выбрасываем.
     // deno-lint-ignore no-explicit-any
     const results = new Map<string, any>(((data?.results ?? []) as any[]).filter((r) => r?.url).map((r) => [norm(r.url), r]));
@@ -151,23 +167,24 @@ Deno.serve(async (req) => {
         if (c?.url && !results.has(norm(c.url))) results.set(norm(c.url), { url: c.url, title: c.title ?? null, publishedDate: null });
       }
     }
-    const parsed = raw.map((line) => {
-      const p = line.split("::").map((x) => x.trim());
-      const url = (line.match(/https?:\/\/[^\s)\]]+/) ?? [""])[0];
+    const clip = (v: unknown, n: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : null);
+    const parsed = raw.map((it) => {
+      const url = String(it?.url ?? "").match(/https?:\/\/[^\s)\]]+/)?.[0] ?? "";
       const hit = results.get(norm(url));
-      const type = (p[0] ?? "").toLowerCase() as IdeaType;
-      return hit && p.length >= 6 && p[1] && p[2] ? {
+      const type = String(it?.type ?? "").toLowerCase();
+      if (!hit || !clip(it?.title, 120) || !clip(it?.idea, 500)) return null;
+      return {
         card_id: cardId,
         source_type: (TYPES as readonly string[]).includes(type) ? type : "article",
-        title: p[1].slice(0, 120),
-        idea: p[2].slice(0, 500),
-        why: (p[3] ?? "").slice(0, 300) || null,
-        try_today: (p[4] ?? "").replace(/^try today:\s*/i, "").slice(0, 200) || null,
-        source_name: (p[5] && !p[5].startsWith("http") ? p[5] : null)?.slice(0, 120) ?? null,
+        title: clip(it.title, 120),
+        idea: clip(it.idea, 500),
+        why: clip(it.why, 300),
+        try_today: clip(String(it.try_today ?? "").replace(/^try today:\s*/i, ""), 200),
+        source_name: clip(it.source_name, 120),
         source_title: hit.title ?? null,
         source_url: String(hit.url),
         published_date: hit.publishedDate ? String(hit.publishedDate).slice(0, 10) : null,
-      } : null;
+      };
     }).filter(Boolean) as Record<string, unknown>[];
 
     // До 3 идей, по возможности разных типов, без повторов источника.
@@ -183,7 +200,7 @@ Deno.serve(async (req) => {
       }
     }
     if (!picked.length) {
-      throw new Error(`no ideas with a verifiable source | lines=${raw.length} | sample=${(raw[0] ?? "").slice(0, 300)} | urls=${[...results.keys()].slice(0, 6).join(" , ")} | outType=${typeof data?.output?.content}`);
+      throw new Error(`no ideas with a verifiable source | lines=${raw.length} | sample=${JSON.stringify(raw[0] ?? null).slice(0, 300)} | urls=${[...results.keys()].slice(0, 6).join(" , ")} | outType=${typeof data?.output?.content}`);
     }
 
     const batch_at = new Date().toISOString();
