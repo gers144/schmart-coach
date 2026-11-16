@@ -132,3 +132,28 @@ create policy "read ready cards" on public.cards
 alter table public.cards drop constraint if exists cards_status_check;
 alter table public.cards add constraint cards_status_check check (status in ('draft','ingesting','ready','refresh','error'));
 -- Пересобрать всё безопасно: update cards set status='refresh'; затем ./ingest-all.sh
+
+-- ===== Идеи к карточке (свежие подкасты / исследования / статьи через Exa) =====
+create table if not exists public.card_ideas (
+  id             uuid primary key default gen_random_uuid(),
+  card_id        text not null references public.cards(id) on delete cascade,
+  title          text not null,
+  idea           text not null,
+  why            text,
+  try_today      text,
+  source_type    text not null check (source_type in ('podcast','research','article','video')),
+  source_title   text,
+  source_name    text,
+  source_url     text not null,
+  published_date date,
+  batch_at       timestamptz not null default now(),
+  created_at     timestamptz not null default now()
+);
+create index if not exists card_ideas_card_batch on public.card_ideas (card_id, batch_at desc);
+alter table public.card_ideas enable row level security;  -- читаем только через Edge Function
+
+alter table public.cards add column if not exists ideas_requested_at timestamptz;
+
+-- новый режим чата: разбор идеи (id идеи хранится в chats.point_id)
+alter table public.chats drop constraint if exists chats_mode_check;
+alter table public.chats add constraint chats_mode_check check (mode in ('quote','point','person','idea'));

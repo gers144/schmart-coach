@@ -3,6 +3,7 @@
 //   quote  — разобрать цитату и применить к своему дню
 //   point  — обсудить конкретный пункт (talking_points[i])
 //   person — узнать больше фактов о человеке/персонаже
+//   idea   — разобрать свежую идею к карточке (подкаст/исследование/статья из card_ideas)
 //
 // 1) Начать чат:   POST { "card_id": "jobs", "mode": "point", "point_id": "p2" }
 //    → { chat_id, reply, chips }
@@ -47,7 +48,10 @@ function json(body: unknown, status = 200) {
   });
 }
 
-type Mode = "quote" | "point" | "person";
+type Mode = "quote" | "point" | "person" | "idea";
+type Idea = { id: string; title: string; idea: string; why: string | null; try_today: string | null; source_type: string; source_name: string | null; source_title: string | null; source_url: string; published_date: string | null };
+const IDEA_FIELDS = "id, title, idea, why, try_today, source_type, source_name, source_title, source_url, published_date";
+const FUNCTIONS_URL = `${Deno.env.get("SUPABASE_URL")}/functions/v1`;
 type Point = { id: string; title: string; question: string; angle?: string };
 type Card = {
   id: string;
@@ -70,6 +74,7 @@ RULES
 - Reply in the language the user writes in (English, Russian, Estonian…). The app UI is in English.
 - Rely on KNOWLEDGE first; use web results only to add a clearly reliable detail, never gossip.
 - Output: "reply" = your next message to the user. "action" = the ONE concrete action for today (what, when, how much), filled ONLY when the user has just agreed to it or proposed it themselves; while you are still proposing or asking, "action" must be an empty string.
+- Never promise to remind the user yourself and never offer reminders; you cannot send messages later. If they want a reminder, tell them to tap "Remind me tonight" below the chat.
 - Respect KNOWLEDGE.avoid. If the user pushes on gossip, scandals or private life, briefly steer back to the idea of the card.
 - If the user shows real distress or risk of harm, stop coaching, respond with care, and suggest talking to a trusted person or a professional. In Estonia: emergency 112; emotional support 116 123 (daily 10–24, Estonian/Russian/English); crisis line 116 006 (24/7); under 18: Lasteabi 116 111 (24/7).`;
 
@@ -111,8 +116,14 @@ async function ipHash(req: Request) {
 }
 const since = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 
-function modeRules(mode: Mode, card: Card, point?: Point) {
+function modeRules(mode: Mode, card: Card, point?: Point, idea?: Idea) {
   const who = card.kind === "action" ? "this daily action" : card.person;
+  if (mode === "idea") {
+    return `MODE: FRESH IDEA. The user tapped a fresh idea linked to this card, found in a ${idea?.source_type} (${idea?.source_name ?? idea?.source_title ?? "source"}).
+IDEA (verified summary of that one source, JSON): ${JSON.stringify(idea ?? {})}
+Unpack this idea: what it says, why it works (only what IDEA.why and the source support), how it connects to the card. You may name the source (show, journal or publication) but never invent details, numbers or quotes beyond IDEA. If the user asks for more than IDEA contains, say the full details are in the source and they can open it in the app.
+Then help them turn it into ONE small action for today, starting from IDEA.try_today.`;
+  }
   if (mode === "quote") {
     return `MODE: QUOTE. Help the user understand the card and apply it to TODAY.
 Flow across the conversation: question → short real story/context → link to the user's life → ONE concrete action for today (what, when, how much). After the action is set, wrap up warmly and invite them to come back tomorrow for a new card.`;
@@ -125,8 +136,15 @@ Use the relevant facts and stories, ask about the user's experience, and when it
 Answer questions from KNOWLEDGE facts and stories, tell them vividly but accurately. Then briefly link the fact to the user's own life with one question. If they ask something not covered, say so and suggest what you can tell instead.`;
 }
 
-function openerFor(mode: Mode, card: Card, point?: Point): { reply: string; chips: string[] } {
+function openerFor(mode: Mode, card: Card, point?: Point, idea?: Idea): { reply: string; chips: string[] } {
   const k = card.knowledge ?? {};
+  if (mode === "idea" && idea) {
+    const from = idea.source_name ? ` (from ${idea.source_name})` : "";
+    return {
+      reply: `**${idea.title}**${from}. ${idea.idea} Want to dig into why it works, or turn it into something you try today?`,
+      chips: ["Why does it work?", "How do I try it today?", "How is it linked to my card?"],
+    };
+  }
   if (mode === "quote") return { reply: k.opener ?? "What in this quote speaks to you today?", chips: k.chips ?? [] };
   if (mode === "point") return { reply: point?.question ?? "What would you like to talk about?", chips: [] };
   const topics = (k.stories ?? []).slice(0, 3).map((s: { title: string }) => s.title);
@@ -206,6 +224,35 @@ Deno.serve(async (req) => {
       if (error) throw new Error(error.message);
       return json({ sources: data ?? [] });
     }
+    if (body.op === "ideas") {
+      const cardId = String(body.card_id ?? "");
+      const { data: last } = await sb.from("card_ideas").select("batch_at")
+        .eq("card_id", cardId).order("batch_at", { ascending: false }).limit(1).maybeSingle();
+      let ideas: Idea[] = [];
+      if (last) {
+        const { data } = await sb.from("card_ideas").select(IDEA_FIELDS).eq("card_id", cardId).eq("batch_at", last.batch_at);
+        ideas = (data ?? []) as Idea[];
+      }
+      // Нет идей или они старше 14 дней → обновляем в фоне (не чаще раза в час на карточку).
+      const stale = !last || Date.now() - new Date(last.batch_at).getTime() > 14 * 864e5;
+      let refreshing = false;
+      if (stale) {
+        const { data: c } = await sb.from("cards").select("ideas_requested_at, status").eq("id", cardId).maybeSingle();
+        const recent = c?.ideas_requested_at && Date.now() - new Date(c.ideas_requested_at).getTime() < 3600e3;
+        if (c && ["ready", "refresh"].includes(c.status) && !recent) {
+          refreshing = true;
+          await sb.from("cards").update({ ideas_requested_at: new Date().toISOString() }).eq("id", cardId);
+          const job = fetch(`${FUNCTIONS_URL}/ingest-ideas`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-admin-token": Deno.env.get("ADMIN_TOKEN") ?? "" },
+            body: JSON.stringify({ card_id: cardId }),
+          }).catch((e) => console.error("ingest-ideas", e));
+          // deno-lint-ignore no-explicit-any
+          (globalThis as any).EdgeRuntime?.waitUntil?.(job);
+        } else if (recent) refreshing = true;
+      }
+      return json({ ideas, refreshing: refreshing && ideas.length === 0 });
+    }
     if (body.op === "waitlist") {
       const email = String(body.email ?? "").trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) return json({ error: "invalid email" }, 400);
@@ -217,7 +264,7 @@ Deno.serve(async (req) => {
 
     // ---------- 1) старт чата ----------
     if (!body.chat_id) {
-      const mode: Mode = ["quote", "point", "person"].includes(body.mode) ? body.mode : "quote";
+      const mode: Mode = ["quote", "point", "person", "idea"].includes(body.mode) ? body.mode : "quote";
       const card = await loadCard(String(body.card_id ?? ""));
       if (!card) return json({ error: "card not found or not ready" }, 404);
 
@@ -225,6 +272,13 @@ Deno.serve(async (req) => {
       if (mode === "point") {
         point = (card.knowledge?.talking_points ?? []).find((p: Point) => p.id === body.point_id);
         if (!point) return json({ error: "point_id not found for this card" }, 400);
+      }
+      let idea: Idea | undefined;
+      if (mode === "idea") {
+        const { data } = await sb.from("card_ideas").select(IDEA_FIELDS)
+          .eq("id", String(body.idea_id ?? "")).eq("card_id", card.id).maybeSingle();
+        if (!data) return json({ error: "idea_id not found for this card" }, 400);
+        idea = data as Idea;
       }
 
       const ip = await ipHash(req);
@@ -234,11 +288,11 @@ Deno.serve(async (req) => {
         return json({ error: "Too many new chats. Take a short break and try again in a few minutes." }, 429);
       }
       const { data: chat, error } = await sb.from("chats")
-        .insert({ card_id: card.id, mode, point_id: point?.id ?? null, client_ip: ip })
+        .insert({ card_id: card.id, mode, point_id: point?.id ?? idea?.id ?? null, client_ip: ip })
         .select("id").single();
       if (error || !chat) throw new Error(`create chat: ${error?.message}`);
 
-      const opener = openerFor(mode, card, point);
+      const opener = openerFor(mode, card, point, idea);
       await sb.from("messages").insert({ chat_id: chat.id, role: "assistant", content: opener.reply });
       return json({ chat_id: chat.id, reply: opener.reply, chips: opener.chips });
     }
@@ -291,7 +345,12 @@ Deno.serve(async (req) => {
     while (history.length && history[0].role === "assistant") history.shift();
 
     const point = (card.knowledge?.talking_points ?? []).find((p: Point) => p.id === chat.point_id);
-    const opener = openerFor(chat.mode as Mode, card, point).reply;
+    let idea: Idea | undefined;
+    if (chat.mode === "idea" && chat.point_id) {
+      const { data } = await sb.from("card_ideas").select(IDEA_FIELDS).eq("id", chat.point_id).maybeSingle();
+      idea = (data ?? undefined) as Idea | undefined;
+    }
+    const opener = openerFor(chat.mode as Mode, card, point, idea).reply;
     const knowledge = { ...card.knowledge };
     delete knowledge.built_with;
     delete knowledge.grounding; // служебные поля Exa не нужны коучу и раздувают запрос
@@ -301,7 +360,7 @@ Deno.serve(async (req) => {
 CARD: ${card.kind === "action" ? "daily action card" : card.kind === "character" ? `fictional character ${card.person} from ${card.source_work}` : `real person ${card.person}`}
 TEXT ON CARD: "${card.quote}"${["unknown", "disputed"].includes(card.knowledge?.attribution?.status) ? `\nATTRIBUTION: NOT CONFIRMED (${card.knowledge.attribution.status}). Always call it "a line often attributed to ${card.person}" or "this card's quote". Never write "${card.person} said", "${card.person}'s message" or "${card.person} believes" about this quote.` : ""}
 
-${modeRules(chat.mode as Mode, card, point)}
+${modeRules(chat.mode as Mode, card, point, idea)}
 
 The conversation started with your scripted message: "${opener}"
 
