@@ -1,10 +1,12 @@
 import json, re
 d = json.load(open('/home/claude/gh-schmart/audio/cards_data.json'))
 def clean(t):
+    t = re.sub(r'(\d)\s*[–—-]\s*(\d)', r'\1 to \2', t or '')
+    t = re.sub(r'\s*\((\d{4})\s*[–—-]\s*(\d{4})\)', '', t)
     t = (t or '').replace('“','"').replace('”','"').replace('’',"'").replace('‘',"'").replace('—',', ').replace('–',', ')
     return re.sub(r'\s+',' ',t).strip()
 def sentences(t, n):
-    s = re.split(r'(?<=[.!?])\s+', clean(t)); return ' '.join(s[:n])
+    s = re.split(r'(?<![A-Z])(?<!\b[A-Z]\.)(?<=[.!?])\s+(?=[A-Z])', clean(t)); return ' '.join(s[:n])
 def themeword(th):
     return {'FOCUS':'daily focus','LEGENDS':'legends','ACTORS':'actors','SINGERS':'singers','MOVIES':'movies'}.get(th, th.lower())
 out = {}
@@ -14,7 +16,8 @@ for c in d:
         m = re.match(r'Today is day to:?\s*(.*)', q, re.I)
         body = m.group(1) if m else q
         first, _, rest = body.partition('.')
-        part1 = f"Good morning. Today is a day to {first.strip()[0].lower()+first.strip()[1:]}. {rest.strip()}".strip()
+        task = re.sub(r'\s+today$', '', first.strip(), flags=re.I)
+        part1 = f"Good morning. Today is a day to {task[0].lower()+task[1:]}. {rest.strip()}".strip()
     else:
         who = c['person']
         if c['att']=='fictional':
@@ -42,7 +45,9 @@ for c in d:
     if not act:
         act = "pick one small step from this card and do it before lunch."
     act = act[0].lower()+act[1:] if act else act
-    part4 = f"Your action for today: {act.rstrip('.')}. Have a great day."
+    act = re.sub(r'\s+today\.?$', '', act.rstrip('.'), flags=re.I)
+    end = '' if re.search(r'[.!?]["\']?$', act) else '.'
+    part4 = f"Your action for today: {act}{end} Have a great day."
     out[c['id']] = [p for p in [part1, part2, part3, part4] if p]
 json.dump(out, open('scripts.json','w'), indent=1, ensure_ascii=False)
 words = {k: sum(len(' '.join(v).split()) for _ in [0]) for k,v in out.items()}
