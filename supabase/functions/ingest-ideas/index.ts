@@ -39,7 +39,7 @@ function json(body: unknown, status = 200) {
 const EXCLUDE = [
   "brainyquote.com", "goodreads.com", "azquotes.com", "quotefancy.com", "quotes.net", "wisdomquotes.com",
   "everydaypower.com", "lifehack.org", "keepinspiring.me", "addicted2success.com", "positivityblog.com",
-  "pinterest.com", "quora.com", "reddit.com", "tiktok.com", "instagram.com", "facebook.com", "x.com", "twitter.com",
+  "pinterest.com", "quora.com", "reddit.com", "linkedin.com", "medium.com", "tiktok.com", "instagram.com", "facebook.com", "x.com", "twitter.com",
 ];
 const TYPES = ["podcast", "research", "article", "video"] as const;
 type IdeaType = typeof TYPES[number];
@@ -99,6 +99,33 @@ const OUTPUT_SCHEMA = {
   required: ["ideas"],
 };
 
+
+const PODCAST_HOSTS = ["podcasts.apple.com", "open.spotify.com", "youtube.com", "youtu.be"];
+const isBadLink = (u: string) => /exa\.ai\/library|linkedin\.com/i.test(u);
+const words = (t: string) => new Set(t.toLowerCase().replace(/[^a-z0-9а-я ]/gi, " ").split(/\s+/).filter((w) => w.length > 2));
+
+// Ссылка на библиотеку подкастов Exa → ищем тот же выпуск на Apple Podcasts / Spotify / YouTube.
+async function originalPodcastUrl(episodeTitle: string, show: string | null): Promise<string | null> {
+  if (!episodeTitle) return null;
+  try {
+    const res = await fetch("https://api.exa.ai/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": EXA_API_KEY },
+      body: JSON.stringify({ query: `${show ?? ""} ${episodeTitle}`.trim(), type: "auto", numResults: 5, includeDomains: PODCAST_HOSTS }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const want = words(episodeTitle);
+    // deno-lint-ignore no-explicit-any
+    for (const r of (data?.results ?? []) as any[]) {
+      const got = words(String(r?.title ?? ""));
+      const overlap = [...want].filter((w) => got.has(w)).length / Math.max(1, want.size);
+      if (overlap >= 0.5 && r?.url) return String(r.url);
+    }
+  } catch { /* оставляем исходную ссылку */ }
+  return null;
+}
+
 const norm = (u: string) => {
   try {
     const x = new URL(u);
@@ -127,7 +154,11 @@ Deno.serve(async (req) => {
     const { data: last } = await sb.from("card_ideas").select("batch_at")
       .eq("card_id", cardId).order("batch_at", { ascending: false }).limit(1).maybeSingle();
     if (last && Date.now() - new Date(last.batch_at).getTime() < FRESH_DAYS * 864e5) {
-      return json({ ok: true, skipped: "ideas are still fresh" });
+      // исключение: в текущей подборке есть ссылки на LinkedIn или библиотеку Exa — пересобираем
+      const { data: cur } = await sb.from("card_ideas").select("source_url").eq("card_id", cardId).eq("batch_at", last.batch_at);
+      if (!(cur ?? []).some((x: { source_url: string }) => isBadLink(x.source_url))) {
+        return json({ ok: true, skipped: "ideas are still fresh" });
+      }
     }
   }
   await sb.from("cards").update({ ideas_requested_at: new Date().toISOString() }).eq("id", cardId);
@@ -199,7 +230,7 @@ Deno.serve(async (req) => {
     }
 
     // До 3 идей, по возможности разных типов, без повторов источника.
-    const picked: Record<string, unknown>[] = [];
+    let picked: Record<string, unknown>[] = [];
     const seenUrl = new Set<string>();
     for (const pass of [true, false]) {
       for (const it of parsed) {
@@ -210,6 +241,13 @@ Deno.serve(async (req) => {
         seenUrl.add(norm(String(it.source_url)));
       }
     }
+    for (const it of picked) {
+      if (/exa\.ai\/library/i.test(String(it.source_url))) {
+        const orig = await originalPodcastUrl(String(it.source_title ?? ""), (it.source_name as string) ?? null);
+        if (orig) it.source_url = orig;
+      }
+    }
+    picked = picked.filter((it) => !isBadLink(String(it.source_url)));
     if (!picked.length) {
       throw new Error(`no ideas with a verifiable source | lines=${raw.length} | sample=${JSON.stringify(raw[0] ?? null).slice(0, 300)} | urls=${[...results.keys()].slice(0, 6).join(" , ")}`);
     }
