@@ -1,8 +1,8 @@
 import json, re
 d = json.load(open('/home/claude/gh-schmart/audio/cards_data.json'))
 def clean(t):
-    t = re.sub(r'(\d)\s*[–—-]\s*(\d)', r'\1 to \2', t or '')
     t = re.sub(r'\s*\((\d{4})\s*[–—-]\s*(\d{4})\)', '', t)
+    t = re.sub(r'(\d)\s*[–—-]\s*(\d)', r'\1 to \2', t or '')
     t = (t or '').replace('“','"').replace('”','"').replace('’',"'").replace('‘',"'").replace('—',', ').replace('–',', ')
     return re.sub(r'\s+',' ',t).strip()
 def sentences(t, n):
@@ -45,7 +45,7 @@ for c in d:
     if not act:
         act = "pick one small step from this card and do it before lunch."
     act = act[0].lower()+act[1:] if act else act
-    act = re.sub(r'\s+today\.?$', '', act.rstrip('.'), flags=re.I)
+    act = re.sub(r'(?<!\bfor)(?<!\bon)\s+today\.?$', '', act.rstrip('.'), flags=re.I)
     end = '' if re.search(r'[.!?]["\']?$', act) else '.'
     part4 = f"Your action for today: {act}{end} Have a great day."
     out[c['id']] = [p for p in [part1, part2, part3, part4] if p]

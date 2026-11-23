@@ -836,33 +836,6 @@
    "Your action for today: ask: \"What can I do differently today?\" Have a great day."
   ]
  },
- "mahatma-gandhi": {
-  "duration": 49.4,
-  "chapters": [
-   {
-    "title": "The card",
-    "start": 0.0
-   },
-   {
-    "title": "The story behind it",
-    "start": 12.8
-   },
-   {
-    "title": "A fresh idea",
-    "start": 28.0
-   },
-   {
-    "title": "Your action for today",
-    "start": 42.3
-   }
-  ],
-  "transcript": [
-   "Good morning. Today's card comes from the legends set. Here's a line often attributed to Mahatma Gandhi: Happiness is when what you think, what you say, and what you do are in harmony.",
-   "Mahatma Gandhi (1869 to 1948) led India's independence movement through non-violent resistance and became a global symbol of truth, simplicity, and service.",
-   "Here's a fresh idea from a recent podcast, Joy Lab Podcast. Act consistently with your authentic values and preferences. Create a \"values tattoo\" that visually captures what matters most.",
-   "Your action for today: write three values and choose one action that matches them. Have a great day."
-  ]
- },
  "richard-branson": {
   "duration": 41.5,
   "chapters": [
@@ -1241,33 +1214,6 @@
    "Your action for today: choose one conversation where you can state your actual preference instead of adapting it. Have a great day."
   ]
  },
- "forrest-gump": {
-  "duration": 43.6,
-  "chapters": [
-   {
-    "title": "The card",
-    "start": 0.0
-   },
-   {
-    "title": "The story behind it",
-    "start": 11.5
-   },
-   {
-    "title": "A fresh idea",
-    "start": 22.8
-   },
-   {
-    "title": "Your action for today",
-    "start": 36.9
-   }
-  ],
-  "transcript": [
-   "Good morning. Today's card comes from the movies set. From Forrest Gump, Forrest Gump says: Life is like a box of chocolates. You never know what you are gonna get.",
-   "Forrest Gump (1994) is a film about a kind, determined man with an IQ of 75 whose life intersects major American events.",
-   "Here's a fresh idea from a recent article. When you say you'll try to change, replace it with a specific commitment and action. Full effort can still fail, but half-hearted attempts rarely change anything.",
-   "Your action for today: pick one habit and write one concrete action for. Have a great day."
-  ]
- },
  "rocky": {
   "duration": 48.9,
   "chapters": [
@@ -1293,33 +1239,6 @@
    "Rocky Balboa is an aging boxer returning from retirement to face a younger opponent. He tells his son that winning comes from enduring setbacks and continuing forward.",
    "Here's a fresh idea from a recent article. Set a realistic, small goal and celebrate each completion. Small wins build confidence and make the next setback easier to face.",
    "Your action for today: pick one tiny task and write down how you completed it. Have a great day."
-  ]
- },
- "chris-gardner": {
-  "duration": 48.0,
-  "chapters": [
-   {
-    "title": "The card",
-    "start": 0.0
-   },
-   {
-    "title": "The story behind it",
-    "start": 20.1
-   },
-   {
-    "title": "A fresh idea",
-    "start": 28.9
-   },
-   {
-    "title": "Your action for today",
-    "start": 40.9
-   }
-  ],
-  "transcript": [
-   "Good morning. Today's card comes from the movies set. From The Pursuit of Happyness, Chris Gardner says: Don't ever let somebody tell you you can't do something, not even me. Alright? You dream, you gotta protect it. People can't do something themselves, they wanna tell you - you can't do it. If you want something, go get it.",
-   "Chris Gardner is a father and aspiring salesman who endures homelessness and hardship while pursuing a better life for his son.",
-   "Here's a fresh idea from a recent article. Turn vague intentions into a committed next step. Full commitment reduces excuses and keeps you moving toward the goal.",
-   "Your action for today: pick one dream and schedule one concrete action for. Have a great day."
   ]
  },
  "piglet": {
@@ -1376,8 +1295,89 @@
    "Your action for today: next time stress hits, ask: \"What can I actually do?\" Have a great day."
   ]
  },
+ "mahatma-gandhi": {
+  "duration": 44.5,
+  "chapters": [
+   {
+    "title": "The card",
+    "start": 0.0
+   },
+   {
+    "title": "The story behind it",
+    "start": 12.8
+   },
+   {
+    "title": "A fresh idea",
+    "start": 23.1
+   },
+   {
+    "title": "Your action for today",
+    "start": 37.4
+   }
+  ],
+  "transcript": [
+   "Good morning. Today's card comes from the legends set. Here's a line often attributed to Mahatma Gandhi: Happiness is when what you think, what you say, and what you do are in harmony.",
+   "Mahatma Gandhi led India's independence movement through non-violent resistance and became a global symbol of truth, simplicity, and service.",
+   "Here's a fresh idea from a recent podcast, Joy Lab Podcast. Act consistently with your authentic values and preferences. Create a \"values tattoo\" that visually captures what matters most.",
+   "Your action for today: write three values and choose one action that matches them. Have a great day."
+  ]
+ },
+ "forrest-gump": {
+  "duration": 44.0,
+  "chapters": [
+   {
+    "title": "The card",
+    "start": 0.0
+   },
+   {
+    "title": "The story behind it",
+    "start": 11.5
+   },
+   {
+    "title": "A fresh idea",
+    "start": 22.8
+   },
+   {
+    "title": "Your action for today",
+    "start": 36.9
+   }
+  ],
+  "transcript": [
+   "Good morning. Today's card comes from the movies set. From Forrest Gump, Forrest Gump says: Life is like a box of chocolates. You never know what you are gonna get.",
+   "Forrest Gump (1994) is a film about a kind, determined man with an IQ of 75 whose life intersects major American events.",
+   "Here's a fresh idea from a recent article. When you say you'll try to change, replace it with a specific commitment and action. Full effort can still fail, but half-hearted attempts rarely change anything.",
+   "Your action for today: pick one habit and write one concrete action for today. Have a great day."
+  ]
+ },
+ "chris-gardner": {
+  "duration": 48.4,
+  "chapters": [
+   {
+    "title": "The card",
+    "start": 0.0
+   },
+   {
+    "title": "The story behind it",
+    "start": 20.1
+   },
+   {
+    "title": "A fresh idea",
+    "start": 28.9
+   },
+   {
+    "title": "Your action for today",
+    "start": 40.9
+   }
+  ],
+  "transcript": [
+   "Good morning. Today's card comes from the movies set. From The Pursuit of Happyness, Chris Gardner says: Don't ever let somebody tell you you can't do something, not even me. Alright? You dream, you gotta protect it. People can't do something themselves, they wanna tell you - you can't do it. If you want something, go get it.",
+   "Chris Gardner is a father and aspiring salesman who endures homelessness and hardship while pursuing a better life for his son.",
+   "Here's a fresh idea from a recent article. Turn vague intentions into a committed next step. Full commitment reduces excuses and keeps you moving toward the goal.",
+   "Your action for today: pick one dream and schedule one concrete action for today. Have a great day."
+  ]
+ },
  "donald-duck": {
-  "duration": 39.5,
+  "duration": 39.9,
   "chapters": [
    {
     "title": "The card",
@@ -1400,7 +1400,7 @@
    "Good morning. Today's card comes from the movies set. From DuckTales the Movie, Donald Duck says: Happiness is the richest thing we will ever own.",
    "Donald Duck, the short-tempered Disney duck, delivers this line in the 1990 DuckTales film.",
    "Here's a fresh idea from a recent article. True wealth includes calm, genuine laughter, healthy relationships, and peace of mind, not only money or status. Protect those things when making choices.",
-   "Your action for today: list three non-material things you are grateful for. Have a great day."
+   "Your action for today: list three non-material things you are grateful for today. Have a great day."
   ]
  }
 }
