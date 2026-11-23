@@ -2,10 +2,10 @@ Add a 1-minute audio version of every card ("Listen to this card"). The audio fi
 
 DATA
 - Index (load once per session and cache in memory):
-  GET https://cdn.jsdelivr.net/gh/gers144/schmart-coach@a4d2ece/audio/en/index.json
+  GET https://cdn.jsdelivr.net/gh/gers144/schmart-coach@c321a84/audio/en/index.json
   → { "<card_id>": { "duration": 43.1, "chapters": [ { "title": "The card", "start": 0 }, { "title": "The story behind it", "start": 15.2 }, ... ], "transcript": ["...", "...", "...", "..."] } }
 - Audio file for a card:
-  https://cdn.jsdelivr.net/gh/gers144/schmart-coach@a4d2ece/audio/en/<card_id>.mp3
+  https://cdn.jsdelivr.net/gh/gers144/schmart-coach@c321a84/audio/en/<card_id>.mp3
 - If the card id is not in the index, or the request fails, hide the player. Never block the page.
 
 WHERE
