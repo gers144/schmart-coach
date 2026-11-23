@@ -250,7 +250,7 @@ Deno.serve(async (req) => {
         if (orig) it.source_url = orig;
       }
     }
-    picked = picked.filter((it) => !isBadLink(String(it.source_url)));
+    picked = picked.filter((it) => !isBadLink(String(it.source_url)) && !isMalformed(it as { idea: string; try_today: string | null }));
     if (!picked.length) {
       throw new Error(`no ideas with a verifiable source | lines=${raw.length} | sample=${JSON.stringify(raw[0] ?? null).slice(0, 300)} | urls=${[...results.keys()].slice(0, 6).join(" , ")}`);
     }
