@@ -102,6 +102,9 @@ const OUTPUT_SCHEMA = {
 
 const PODCAST_HOSTS = ["podcasts.apple.com", "open.spotify.com", "youtube.com", "youtu.be"];
 const isBadLink = (u: string) => /exa\.ai\/library|linkedin\.com/i.test(u);
+// Идеи из ранней версии парсера: в try_today попадало имя источника, idea обрезана.
+const wc = (t: string | null | undefined) => (t ?? "").trim().split(/\s+/).filter(Boolean).length;
+const isMalformed = (x: { idea: string; try_today: string | null }) => wc(x.try_today) < 4 || wc(x.idea) < 8 || !/[.!?]$/.test((x.idea ?? "").trim());
 const words = (t: string) => new Set(t.toLowerCase().replace(/[^a-z0-9а-я ]/gi, " ").split(/\s+/).filter((w) => w.length > 2));
 
 // Ссылка на библиотеку подкастов Exa → ищем тот же выпуск на Apple Podcasts / Spotify / YouTube.
@@ -155,8 +158,8 @@ Deno.serve(async (req) => {
       .eq("card_id", cardId).order("batch_at", { ascending: false }).limit(1).maybeSingle();
     if (last && Date.now() - new Date(last.batch_at).getTime() < FRESH_DAYS * 864e5) {
       // исключение: в текущей подборке есть ссылки на LinkedIn или библиотеку Exa — пересобираем
-      const { data: cur } = await sb.from("card_ideas").select("source_url").eq("card_id", cardId).eq("batch_at", last.batch_at);
-      if (!(cur ?? []).some((x: { source_url: string }) => isBadLink(x.source_url))) {
+      const { data: cur } = await sb.from("card_ideas").select("source_url, idea, try_today").eq("card_id", cardId).eq("batch_at", last.batch_at);
+      if (!(cur ?? []).some((x: { source_url: string; idea: string; try_today: string | null }) => isBadLink(x.source_url) || isMalformed(x))) {
         return json({ ok: true, skipped: "ideas are still fresh" });
       }
     }
