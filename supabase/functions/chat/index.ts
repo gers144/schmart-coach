@@ -225,33 +225,60 @@ Deno.serve(async (req) => {
       return json({ sources: data ?? [] });
     }
     if (body.op === "ideas") {
+      // Закреплённая идея (та, что в аудио) + последняя пачка без дублей. Автообновления нет.
       const cardId = String(body.card_id ?? "");
+      const { data: pin } = await sb.from("card_ideas").select(IDEA_FIELDS)
+        .eq("card_id", cardId).eq("pinned", true).limit(1).maybeSingle();
       const { data: last } = await sb.from("card_ideas").select("batch_at")
         .eq("card_id", cardId).order("batch_at", { ascending: false }).limit(1).maybeSingle();
       let ideas: Idea[] = [];
       if (last) {
         const { data } = await sb.from("card_ideas").select(IDEA_FIELDS).eq("card_id", cardId).eq("batch_at", last.batch_at);
-        ideas = (data ?? []) as Idea[];
+        ideas = ((data ?? []) as Idea[]).filter((x) => x.id !== pin?.id && x.source_url !== pin?.source_url);
       }
-      // Нет идей или они старше 14 дней → обновляем в фоне (не чаще раза в час на карточку).
-      const stale = !last || Date.now() - new Date(last.batch_at).getTime() > 14 * 864e5;
-      let refreshing = false;
-      if (stale) {
-        const { data: c } = await sb.from("cards").select("ideas_requested_at, status").eq("id", cardId).maybeSingle();
-        const recent = c?.ideas_requested_at && Date.now() - new Date(c.ideas_requested_at).getTime() < 3600e3;
-        if (c && ["ready", "refresh"].includes(c.status) && !recent) {
-          refreshing = true;
-          await sb.from("cards").update({ ideas_requested_at: new Date().toISOString() }).eq("id", cardId);
-          const job = fetch(`${FUNCTIONS_URL}/ingest-ideas`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-admin-token": Deno.env.get("ADMIN_TOKEN") ?? "" },
-            body: JSON.stringify({ card_id: cardId }),
-          }).catch((e) => console.error("ingest-ideas", e));
-          // deno-lint-ignore no-explicit-any
-          (globalThis as any).EdgeRuntime?.waitUntil?.(job);
-        } else if (recent) refreshing = true;
+      return json({ pinned: pin ?? null, ideas });
+    }
+    if (body.op === "more_ideas") {
+      // Кнопка «More fresh ideas». seen = id идей, которые пользователь уже видел.
+      const cardId = String(body.card_id ?? "");
+      const seen = new Set<string>(Array.isArray(body.seen) ? body.seen.map(String) : []);
+      const all = async () => {
+        const { data } = await sb.from("card_ideas").select(IDEA_FIELDS + ", batch_at, pinned")
+          .eq("card_id", cardId).order("batch_at", { ascending: false }).limit(60);
+        return (data ?? []) as (Idea & { batch_at: string; pinned: boolean })[];
+      };
+      const unseen = (rows: (Idea & { batch_at: string; pinned: boolean })[]) => {
+        const seenUrls = new Set(rows.filter((r) => seen.has(r.id) || r.pinned).map((r) => r.source_url));
+        const out: Idea[] = [];
+        for (const r of rows) {
+          if (r.pinned || seen.has(r.id) || seenUrls.has(r.source_url)) continue;
+          seenUrls.add(r.source_url);
+          const { batch_at: _b, pinned: _p, ...idea } = r;
+          out.push(idea as Idea);
+        }
+        return out.slice(0, 3);
+      };
+      let rows = await all();
+      let fresh = unseen(rows);
+      if (fresh.length) return json({ ideas: fresh, status: "ok" });
+      // Ничего нового в базе — ищем через Exa, но не чаще раза в 7 дней и раза в час на карточку.
+      const newest = rows[0]?.batch_at ? new Date(rows[0].batch_at).getTime() : 0;
+      const { data: c } = await sb.from("cards").select("ideas_requested_at, status").eq("id", cardId).maybeSingle();
+      const recent = c?.ideas_requested_at && Date.now() - new Date(c.ideas_requested_at).getTime() < 3600e3;
+      if (!c || !["ready", "refresh"].includes(c.status) || recent || Date.now() - newest < 7 * 864e5) {
+        return json({ ideas: [], status: "none", message: "No new ideas yet. Check back in a few days." });
       }
-      return json({ ideas, refreshing: refreshing && ideas.length === 0 });
+      await sb.from("cards").update({ ideas_requested_at: new Date().toISOString() }).eq("id", cardId);
+      const r = await fetch(`${FUNCTIONS_URL}/ingest-ideas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-token": Deno.env.get("ADMIN_TOKEN") ?? "" },
+        body: JSON.stringify({ card_id: cardId }),
+      }).catch((e) => { console.error("ingest-ideas", e); return null; });
+      if (r) await r.text().catch(() => "");
+      rows = await all();
+      fresh = unseen(rows);
+      return json(fresh.length ? { ideas: fresh, status: "ok" }
+        : { ideas: [], status: "none", message: "No new ideas yet. Check back in a few days." });
     }
     if (body.op === "waitlist") {
       const email = String(body.email ?? "").trim().toLowerCase();
