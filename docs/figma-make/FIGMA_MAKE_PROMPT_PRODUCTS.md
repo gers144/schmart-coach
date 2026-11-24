@@ -17,7 +17,7 @@ CARD "Daily Focus"
   1. Copy the prompt.
   2. Open Claude and paste it.
   3. Allow Gmail and Calendar when Claude asks. That's it.
-- The prompt itself in a grey rounded box (monospace, 13px), collapsed to 6 lines with "Show full prompt". Above the box, a small EN / RU toggle (EN by default).
+- The prompt itself in a grey rounded box (monospace, 13px), collapsed to 6 lines with "Show full prompt". Above the box, a small EN / RU / ET toggle (EN by default).
 - Buttons:
   - Dark: "Copy prompt" → copies the visible language version, then shows "Copied ✓" for 2 seconds.
   - Outline: "Open in Claude" → opens https://claude.ai/new?q=<the prompt, URL-encoded> in a new tab.
@@ -32,5 +32,10 @@ PROMPT TEXT — RU:
 Создай мне личный планировщик Daily Focus в виде веб-приложения. Подключи мой Gmail и Google Calendar с моего разрешения. Каждое утро составляй список задач на день: ищи поручения и дедлайны в письмах за последние 14 дней, сверяйся с отправленными ответами и учитывай встречи и пересечения в календаре. Если замечаешь повторяющуюся задачу, предложи добавить её в расписание.
 Сделай вкладки «Сегодня», «Предстоящие», «Выполнено» и «Привычки». Я хочу добавлять задачи вручную, переносить их на завтра одной кнопкой и отмечать выполненные. Сохраняй историю, ручные изменения и серии привычек. Вверху покажи мои цели недели с галочками. Ссылки на письма и события добавляй прямо к задачам.
 Сделай приложение удобным на телефоне и доступным только мне. Если в этом чате нельзя подключить почту, календарь или утреннее обновление, собери рабочую ручную версию и скажи, чего не хватает для автоматизации.
+
+PROMPT TEXT — ET:
+Loo mulle isiklik Daily Focus planeerija veebirakendusena. Ühenda minu Gmail ja Google Calendar minu loal. Koosta igal hommikul päeva ülesannete nimekiri: otsi viimase 14 päeva e-kirjadest ülesandeid ja tähtaegu, võrdle neid minu saadetud vastustega ning arvesta kohtumiste ja kattuvustega kalendris. Kui märkad korduvat ülesannet, soovita see ajakavasse lisada.
+Tee vahelehed „Täna“, „Tulevased“, „Tehtud“ ja „Harjumused“. Tahan lisada ülesandeid käsitsi, lükata neid ühe nupuvajutusega homsesse ja märkida tehtuks. Salvesta ajalugu, käsitsi tehtud muudatused ja harjumuste seeriad. Näita ülaosas minu nädala eesmärke linnukestega. Lisa ülesannete juurde otse lingid e-kirjadele ja sündmustele.
+Tee rakendus telefonis mugavaks ja ainult mulle ligipääsetavaks. Kui selles vestluses ei saa e-posti, kalendrit ega hommikust uuendust ühendada, ehita töötav käsitsi versioon ja ütle, mis automatiseerimiseks puudu on.
 
 At the bottom of the page: small text "More free tools coming soon" + the existing email capture ("Get new tools first"), saved via POST { "op": "waitlist", "email", "product": "products" }.
